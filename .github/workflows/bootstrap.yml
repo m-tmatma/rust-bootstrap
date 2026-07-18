@@ -71,7 +71,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential g++ make patch \
-            zlib1g-dev curl cmake pkg-config python3 libssl-dev
+            zlib1g-dev curl cmake pkg-config python3 libssl-dev libgit2-dev
 
       - uses: actions/download-artifact@v8
         with:
@@ -87,7 +87,14 @@ jobs:
       - name: Build libstd, rustc, cargo via mrustc
         run: |
           # 並列ビルドは壊れることがある。まず PARLEVEL 未指定で様子見
-          make -f minicargo.mk RUSTC_VERSION=${{ env.RUSTC_VERSION }}
+          # MRUSTC_TARGET_VER (major.minor) 未設定だと古いモードにフォールバックしてクラッシュする
+          export MRUSTC_TARGET_VER=$(echo ${{ env.RUSTC_VERSION }} | cut -d. -f1,2)
+          OUTDIR="output-${{ env.RUSTC_VERSION }}"
+          # `all` (デフォルトターゲット)は $(OUTDIR)/rustc までしか作らないので、
+          # cargo は upstream の build-1.90.0.sh に倣って別ターゲットとして明示的にビルドする
+          make -f minicargo.mk RUSTC_VERSION=${{ env.RUSTC_VERSION }} LIBS
+          RUSTC_INSTALL_BINDIR=bin make -f minicargo.mk RUSTC_VERSION=${{ env.RUSTC_VERSION }} "$OUTDIR/rustc"
+          LIBGIT2_SYS_USE_PKG_CONFIG=1 make -f minicargo.mk RUSTC_VERSION=${{ env.RUSTC_VERSION }} "$OUTDIR/cargo"
 
       - name: Package mrustc-built toolchain
         run: |
