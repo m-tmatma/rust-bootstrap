@@ -1,0 +1,72 @@
+name: chain-step
+
+on:
+  workflow_call:
+    inputs:
+      prev_version:
+        required: true
+        type: string
+      next_version:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+            python3 pkg-config libssl-dev curl
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: toolchain-${{ inputs.prev_version }}
+
+      - name: Install previous toolchain
+        run: |
+          mkdir -p $HOME/prev-toolchain
+          tar -C $HOME/prev-toolchain -xzf toolchain.tar.gz
+          $HOME/prev-toolchain/bin/rustc --version
+
+      - name: Fetch rustc source
+        run: |
+          curl -LO https://static.rust-lang.org/dist/rustc-${{ inputs.next_version }}-src.tar.xz
+          tar xf rustc-${{ inputs.next_version }}-src.tar.xz
+
+      - name: Configure (no stage0 download)
+        working-directory: rustc-${{ inputs.next_version }}-src
+        run: |
+          cat > bootstrap.toml <<EOF
+          [build]
+          rustc = "$HOME/prev-toolchain/bin/rustc"
+          cargo = "$HOME/prev-toolchain/bin/cargo"
+          extended = true
+          tools = ["cargo"]
+          [llvm]
+          download-ci-llvm = false
+          [install]
+          prefix = "$PWD/../install"
+          sysconfdir = "etc"
+          EOF
+
+      - name: Build & install
+        working-directory: rustc-${{ inputs.next_version }}-src
+        run: |
+          ./x.py build --stage 2
+          ./x.py install
+
+      - name: Package toolchain
+        run: tar -C install -czf toolchain.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-${{ inputs.next_version }}
+          path: toolchain.tar.gz

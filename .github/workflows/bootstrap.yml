@@ -1,0 +1,194 @@
+name: rustc-full-source-bootstrap
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  RUSTC_VERSION: "1.90.0"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Stage A: mrustc + minicargo 本体のビルド (C++のみ)
+  # ─────────────────────────────────────────────
+  mrustc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: thepowersgang/mrustc
+          # 再現性のため commit をピン留め推奨
+          # ref: <commit-sha>
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++ make patch \
+            zlib1g-dev curl cmake pkg-config python3 libssl-dev ccache
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: mrustc-${{ env.RUSTC_VERSION }}
+
+      - name: Build mrustc & minicargo
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          make -j$(nproc) all
+          make -C tools/minicargo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mrustc-bin
+          path: |
+            bin/mrustc
+            tools/bin/minicargo
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────
+  # Stage B: mrustc で rustc 1.90.0 + cargo をビルド(最長工程)
+  # ─────────────────────────────────────────────
+  mrustc-rustc:
+    needs: mrustc
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 上限いっぱい。溢れるなら larger runner へ
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: thepowersgang/mrustc
+
+      - name: Free disk space
+        run: |
+          # 標準ランナーは空き ~14GB しかないので約 30GB 回収する
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+                      /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++ make patch \
+            zlib1g-dev curl cmake pkg-config python3 libssl-dev
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mrustc-bin
+
+      - name: Restore binaries
+        run: chmod +x bin/mrustc tools/bin/minicargo
+
+      - name: Fetch rustc source (patched)
+        run: make RUSTCSRC RUSTC_VERSION=${{ env.RUSTC_VERSION }}
+
+      - name: Build libstd, rustc, cargo via mrustc
+        run: |
+          # 並列ビルドは壊れることがある。まず PARLEVEL 未指定で様子見
+          make -f minicargo.mk RUSTC_VERSION=${{ env.RUSTC_VERSION }}
+
+      - name: Package mrustc-built toolchain
+        run: |
+          tar -C output-${{ env.RUSTC_VERSION }} \
+              -czf mrustc-toolchain.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-mrustc-${{ env.RUSTC_VERSION }}
+          path: mrustc-toolchain.tar.gz
+
+  # ─────────────────────────────────────────────
+  # Stage C: mrustc製rustcで rustc を再ビルド (stage2 相当)
+  # ─────────────────────────────────────────────
+  self-rebuild:
+    needs: mrustc-rustc
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: thepowersgang/mrustc
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++ make patch \
+            zlib1g-dev curl cmake pkg-config python3 libssl-dev
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: toolchain-mrustc-${{ env.RUSTC_VERSION }}
+
+      - name: Self-rebuild rustc
+        run: |
+          mkdir -p output-${{ env.RUSTC_VERSION }}
+          tar -C output-${{ env.RUSTC_VERSION }} -xzf mrustc-toolchain.tar.gz
+          make -C run_rustc RUSTC_VERSION=${{ env.RUSTC_VERSION }}
+
+      - name: Package stage2 toolchain
+        run: |
+          tar -C run_rustc/output-${{ env.RUSTC_VERSION }}/prefix \
+              -czf toolchain.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-${{ env.RUSTC_VERSION }}
+          path: toolchain.tar.gz
+
+  # ─────────────────────────────────────────────
+  # Stage D 以降: バージョンチェーンを一段ずつ登る
+  # ─────────────────────────────────────────────
+  chain-1_91:
+    needs: self-rebuild
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.90.0"
+      next_version: "1.91.1"
+
+  chain-1_92:
+    needs: chain-1_91
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.91.1"
+      next_version: "1.92.0"
+
+  chain-1_93:
+    needs: chain-1_92
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.92.0"
+      next_version: "1.93.0"
+
+  chain-1_94:
+    needs: chain-1_93
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.93.0"
+      next_version: "1.94.0"
+
+  chain-1_95:
+    needs: chain-1_94
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.94.0"
+      next_version: "1.95.0"
+
+  chain-1_96:
+    needs: chain-1_95
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.95.0"
+      next_version: "1.96.0"
+
+  chain-1_97:
+    needs: chain-1_96
+    uses: ./.github/workflows/chain-step.yml
+    with:
+      prev_version: "1.96.0"
+      next_version: "1.97.1"
