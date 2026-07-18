@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: thepowersgang/mrustc
           # 再現性のため commit をピン留め推奨
@@ -29,7 +29,7 @@ jobs:
           sudo apt-get install -y build-essential g++ make patch \
             zlib1g-dev curl cmake pkg-config python3 libssl-dev ccache
 
-      - uses: hendrikmuhs/ccache-action@v1
+      - uses: hendrikmuhs/ccache-action@v1.2.23
         with:
           key: mrustc-${{ env.RUSTC_VERSION }}
 
@@ -39,7 +39,7 @@ jobs:
           make -j$(nproc) all
           make -C tools/minicargo
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mrustc-bin
           path: |
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360   # 上限いっぱい。溢れるなら larger runner へ
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: thepowersgang/mrustc
 
@@ -73,7 +73,7 @@ jobs:
           sudo apt-get install -y build-essential g++ make patch \
             zlib1g-dev curl cmake pkg-config python3 libssl-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: mrustc-bin
 
@@ -93,7 +93,7 @@ jobs:
           tar -C output-${{ env.RUSTC_VERSION }} \
               -czf mrustc-toolchain.tar.gz .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: toolchain-mrustc-${{ env.RUSTC_VERSION }}
           path: mrustc-toolchain.tar.gz
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: thepowersgang/mrustc
 
@@ -121,7 +121,7 @@ jobs:
           sudo apt-get install -y build-essential g++ make patch \
             zlib1g-dev curl cmake pkg-config python3 libssl-dev
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: toolchain-mrustc-${{ env.RUSTC_VERSION }}
 
@@ -136,7 +136,7 @@ jobs:
           tar -C run_rustc/output-${{ env.RUSTC_VERSION }}/prefix \
               -czf toolchain.tar.gz .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: toolchain-${{ env.RUSTC_VERSION }}
           path: toolchain.tar.gz
