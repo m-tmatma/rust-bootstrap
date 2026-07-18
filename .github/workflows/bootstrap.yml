@@ -76,6 +76,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: mrustc-bin
+          path: bin
 
       - name: Restore binaries
         run: chmod +x bin/mrustc bin/minicargo
