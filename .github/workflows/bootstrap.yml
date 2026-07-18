@@ -44,7 +44,7 @@ jobs:
           name: mrustc-bin
           path: |
             bin/mrustc
-            tools/bin/minicargo
+            bin/minicargo
           if-no-files-found: error
 
   # ─────────────────────────────────────────────
@@ -78,7 +78,7 @@ jobs:
           name: mrustc-bin
 
       - name: Restore binaries
-        run: chmod +x bin/mrustc tools/bin/minicargo
+        run: chmod +x bin/mrustc bin/minicargo
 
       - name: Fetch rustc source (patched)
         run: make RUSTCSRC RUSTC_VERSION=${{ env.RUSTC_VERSION }}
