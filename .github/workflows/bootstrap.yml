@@ -127,7 +127,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential g++ make patch \
-            zlib1g-dev curl cmake pkg-config python3 libssl-dev
+            zlib1g-dev curl cmake pkg-config python3 libssl-dev libgit2-dev
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: mrustc-bin
+          path: bin
+
+      - name: Restore binaries
+        run: chmod +x bin/mrustc bin/minicargo
+
+      - name: Fetch rustc source (patched)
+        run: make RUSTCSRC RUSTC_VERSION=${{ env.RUSTC_VERSION }}
 
       - uses: actions/download-artifact@v8
         with:
